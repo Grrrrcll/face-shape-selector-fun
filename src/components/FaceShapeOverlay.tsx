@@ -80,75 +80,172 @@ function distance(p1: { x: number; y: number }, p2: { x: number; y: number }) {
   return Math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2);
 }
 
-// Very simple classifier based on positions of landmarks.
-// For a real-world app, more sophisticated ML should be used.
+// Improved face shape classifier using facial landmarks
 function classifyFaceShape(landmarks: faceapi.FaceLandmarks68): ShapeType {
   const jaw = landmarks.getJawOutline();
   const leftJaw = jaw[0];
   const rightJaw = jaw[16];
   const chin = jaw[8];
-
-  // Forehead is approximated using midpoint between eyebrows points
+  
+  // Use eyebrows to approximate forehead width
   const leftBrow = landmarks.getLeftEyeBrow()[0];
   const rightBrow = landmarks.getRightEyeBrow()[4];
-  const middleBrow = {
+  
+  // Find midpoint between eyebrows (approximate forehead center)
+  const foreheadMid = {
     x: (leftBrow.x + rightBrow.x) / 2,
     y: (leftBrow.y + rightBrow.y) / 2,
   };
-
-  // Cheekbones: use points 3 and 13 (just above jaw on each side)
-  const leftCheekbone = jaw[3];
-  const rightCheekbone = jaw[13];
-
-  const faceWidth = distance(leftJaw, rightJaw);
+  
+  // Cheekbones: use points 3 and 13 from jaw (approximately at cheek level)
+  const leftCheekbone = jaw[2];
+  const rightCheekbone = jaw[14];
+  
+  // Calculate key measurements
+  const jawWidth = distance(leftJaw, rightJaw);
   const cheekboneWidth = distance(leftCheekbone, rightCheekbone);
   const foreheadWidth = distance(leftBrow, rightBrow);
-  const faceLength = distance(middleBrow, chin);
-
-  // Ratio helpers
-  const fw_cw = foreheadWidth / cheekboneWidth;
-  const jaw_cheek = faceWidth / cheekboneWidth;
-  const fl_cw = faceLength / cheekboneWidth;
-
-  // "Classic" rules (very simple, threshold-tuned by hand)
+  const faceLength = distance(foreheadMid, chin);
+  const jawline = calculateJawlineCurve(jaw);
+  
+  // Calculate jawline curve (higher values = more angular)
+  const jawAngle = calculateJawAngle(jaw);
+  
+  // Calculate face width at different heights
+  const topThird = foreheadWidth;
+  const middleThird = cheekboneWidth;
+  const bottomThird = jawWidth;
+  
+  // Calculate ratios
+  const lengthToWidthRatio = faceLength / cheekboneWidth;
+  const foreheadToJawRatio = foreheadWidth / jawWidth;
+  const cheekToJawRatio = cheekboneWidth / jawWidth;
+  const cheekToForeheadRatio = cheekboneWidth / foreheadWidth;
+  
+  // Log values for debugging
+  console.log({
+    jawWidth,
+    cheekboneWidth,
+    foreheadWidth,
+    faceLength,
+    jawline,
+    jawAngle,
+    lengthToWidthRatio,
+    foreheadToJawRatio,
+    cheekToJawRatio,
+    cheekToForeheadRatio
+  });
+  
+  // IMPROVED CLASSIFICATION LOGIC
+  
+  // OVAL: Length is about 1.5x width, face gently tapers toward chin, curved jawline
   if (
-    fl_cw > 1.45 &&
-    Math.abs(cheekboneWidth - foreheadWidth) < 10 &&
-    Math.abs(cheekboneWidth - faceWidth) < 10
+    lengthToWidthRatio > 1.3 && 
+    lengthToWidthRatio < 1.7 &&
+    foreheadToJawRatio > 0.9 &&
+    foreheadToJawRatio < 1.2 &&
+    jawAngle < 0.2
   ) {
     return "oval";
   }
+  
+  // SQUARE: Width and height similar, strong jawline, forehead and jaw widths similar
   if (
-    Math.abs(foreheadWidth - cheekboneWidth) < 10 &&
-    Math.abs(cheekboneWidth - faceWidth) < 10 &&
-    Math.abs(faceLength - faceWidth) < 20
+    lengthToWidthRatio < 1.3 &&
+    foreheadToJawRatio > 0.9 &&
+    foreheadToJawRatio < 1.1 &&
+    jawAngle > 0.3 &&
+    Math.abs(bottomThird - topThird) < bottomThird * 0.15
   ) {
     return "square";
   }
+  
+  // HEART: Wider at forehead, narrower at jaw
   if (
-    foreheadWidth < cheekboneWidth &&
-    faceWidth < cheekboneWidth &&
-    fl_cw < 1.3
-  ) {
-    return "diamond";
-  }
-  if (
-    foreheadWidth > cheekboneWidth &&
-    faceWidth < cheekboneWidth &&
-    fl_cw > 1.3
+    foreheadToJawRatio > 1.2 &&
+    cheekToJawRatio > 1.1 &&
+    cheekToForeheadRatio < 0.95
   ) {
     return "heart";
   }
-  // Approximate triangle: wide jaw, short forehead
+  
+  // DIAMOND: Narrow forehead, wide cheekbones, narrow jaw
   if (
-    faceWidth > cheekboneWidth &&
-    cheekboneWidth > foreheadWidth &&
-    fl_cw < 1.35
+    cheekToForeheadRatio > 1.1 &&
+    cheekToJawRatio > 1.1 &&
+    lengthToWidthRatio > 1.3
+  ) {
+    return "diamond";
+  }
+  
+  // TRIANGLE: Narrow forehead, wider jaw
+  if (
+    foreheadToJawRatio < 0.9 &&
+    cheekToForeheadRatio > 1.05 &&
+    jawWidth > foreheadWidth
   ) {
     return "triangle";
   }
-  // Fallback
+  
+  // Default to oval if no clear match
   return "oval";
+}
+
+// Calculate jaw curve (returns a value that's higher for more angular jaws)
+function calculateJawlineCurve(jawPoints: Array<{ x: number; y: number }>): number {
+  // We'll use points from the lower half of the jawline
+  const lowerJaw = jawPoints.slice(3, 14);
+  
+  // Calculate the average distance from points to a straight line between first and last points
+  const start = lowerJaw[0];
+  const end = lowerJaw[lowerJaw.length - 1];
+  
+  // Calculate straight line equation: ax + by + c = 0
+  const a = end.y - start.y;
+  const b = start.x - end.x;
+  const c = end.x * start.y - start.x * end.y;
+  
+  // Calculate distances from points to line
+  let totalDeviation = 0;
+  for (const point of lowerJaw) {
+    const distance = Math.abs(a * point.x + b * point.y + c) / Math.sqrt(a * a + b * b);
+    totalDeviation += distance;
+  }
+  
+  // Normalize by jawline width
+  return totalDeviation / distance(start, end);
+}
+
+// Calculate jaw angle (higher values = more angular)
+function calculateJawAngle(jawPoints: Array<{ x: number; y: number }>): number {
+  // Get jaw corner points (approximately points 2 and 14)
+  const leftCorner = jawPoints[2];
+  const rightCorner = jawPoints[14];
+  const chin = jawPoints[8];
+  
+  // Calculate angles at jaw corners
+  const leftAngle = calculateAngle(jawPoints[1], leftCorner, jawPoints[3]);
+  const rightAngle = calculateAngle(jawPoints[13], rightCorner, jawPoints[15]);
+  
+  // Average of both corners
+  return (leftAngle + rightAngle) / 2;
+}
+
+// Calculate angle between three points in radians
+function calculateAngle(
+  p1: { x: number; y: number }, 
+  p2: { x: number; y: number }, 
+  p3: { x: number; y: number }
+): number {
+  const v1 = { x: p1.x - p2.x, y: p1.y - p2.y };
+  const v2 = { x: p3.x - p2.x, y: p3.y - p2.y };
+  
+  const dot = v1.x * v2.x + v1.y * v2.y;
+  const mag1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y);
+  const mag2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
+  
+  const cosAngle = dot / (mag1 * mag2);
+  return Math.acos(Math.min(Math.max(cosAngle, -1), 1));
 }
 
 export const FaceShapeOverlay: React.FC = () => {
@@ -241,6 +338,7 @@ export const FaceShapeOverlay: React.FC = () => {
             }
           } catch (err) {
             // If detection fails for a frame, skip but don't crash
+            console.error("Error in face detection:", err);
           }
         }
         await new Promise((r) => setTimeout(r, 80));
