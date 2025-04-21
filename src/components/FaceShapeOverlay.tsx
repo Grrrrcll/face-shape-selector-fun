@@ -1,15 +1,17 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import * as faceapi from "face-api.js";
+import { FaceShapeInfo } from "./FaceShapeInfo";
 
-type ShapeType = "oval" | "square" | "triangle" | "diamond" | "heart";
+type ShapeType = "oval" | "square" | "triangle" | "diamond" | "heart" | "round";
 
 const shapeColors: Record<ShapeType, string> = {
-  oval: "#ffffff",
-  square: "#3b82f6",
-  triangle: "#22d3ee",
-  diamond: "#f472b6",
-  heart: "#f59e42",
+  oval: "#6366f1", // indigo
+  round: "#8b5cf6", // violet
+  square: "#3b82f6", // blue
+  triangle: "#22d3ee", // cyan
+  diamond: "#f472b6", // pink
+  heart: "#f59e42", // orange
 };
 
 const shapeDrawers: Record<
@@ -31,17 +33,44 @@ const shapeDrawers: Record<
     ctx.stroke();
     ctx.restore();
   },
+  round: (ctx, box) => {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(
+      box.x + box.width / 2,
+      box.y + box.height / 2,
+      box.width / 2,
+      0,
+      2 * Math.PI
+    );
+    ctx.stroke();
+    ctx.restore();
+  },
   square: (ctx, box) => {
     ctx.save();
-    ctx.strokeRect(box.x, box.y, box.width, box.height);
+    ctx.beginPath();
+    // Draw a slightly rounded rectangle for square face shape
+    const radius = box.width * 0.05;
+    ctx.moveTo(box.x + radius, box.y);
+    ctx.lineTo(box.x + box.width - radius, box.y);
+    ctx.arcTo(box.x + box.width, box.y, box.x + box.width, box.y + radius, radius);
+    ctx.lineTo(box.x + box.width, box.y + box.height - radius);
+    ctx.arcTo(box.x + box.width, box.y + box.height, box.x + box.width - radius, box.y + box.height, radius);
+    ctx.lineTo(box.x + radius, box.y + box.height);
+    ctx.arcTo(box.x, box.y + box.height, box.x, box.y + box.height - radius, radius);
+    ctx.lineTo(box.x, box.y + radius);
+    ctx.arcTo(box.x, box.y, box.x + radius, box.y, radius);
+    ctx.closePath();
+    ctx.stroke();
     ctx.restore();
   },
   triangle: (ctx, box) => {
     ctx.save();
     ctx.beginPath();
+    // Adjust triangle to better match an inverted triangle face shape
     ctx.moveTo(box.x + box.width / 2, box.y); // Top center
-    ctx.lineTo(box.x, box.y + box.height); // Bottom left
-    ctx.lineTo(box.x + box.width, box.y + box.height); // Bottom right
+    ctx.lineTo(box.x, box.y + box.height * 0.8); // Bottom left
+    ctx.lineTo(box.x + box.width, box.y + box.height * 0.8); // Bottom right
     ctx.closePath();
     ctx.stroke();
     ctx.restore();
@@ -49,10 +78,10 @@ const shapeDrawers: Record<
   diamond: (ctx, box) => {
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(box.x + box.width / 2, box.y); // Top
-    ctx.lineTo(box.x, box.y + box.height / 2); // Left
-    ctx.lineTo(box.x + box.width / 2, box.y + box.height); // Bottom
-    ctx.lineTo(box.x + box.width, box.y + box.height / 2); // Right
+    ctx.moveTo(box.x + box.width / 2, box.y + box.height * 0.1); // Top
+    ctx.lineTo(box.x + box.width * 0.15, box.y + box.height / 2); // Left
+    ctx.lineTo(box.x + box.width / 2, box.y + box.height * 0.9); // Bottom
+    ctx.lineTo(box.x + box.width * 0.85, box.y + box.height / 2); // Right
     ctx.closePath();
     ctx.stroke();
     ctx.restore();
@@ -61,14 +90,35 @@ const shapeDrawers: Record<
     ctx.save();
     ctx.beginPath();
     const x = box.x + box.width / 2;
-    const y = box.y + box.height * 0.40;
-    const w = box.width / 2;
-    const h = box.height / 2;
-    ctx.moveTo(x, y + h / 2);
-    ctx.bezierCurveTo(x, y, x - w, y, x - w, y + h / 2);
-    ctx.bezierCurveTo(x - w, y + h, x, y + h * 1.6, x, y + h * 1.5);
-    ctx.bezierCurveTo(x, y + h * 1.6, x + w, y + h, x + w, y + h / 2);
-    ctx.bezierCurveTo(x + w, y, x, y, x, y + h / 2);
+    const y = box.y + box.height * 0.35;
+    const w = box.width * 0.45;
+    const h = box.height * 0.45;
+    
+    // Draw top of heart (two arcs)
+    ctx.moveTo(x, y);
+    // Left arc
+    ctx.bezierCurveTo(
+      x - w * 0.35, y - h * 0.5, // control point 1
+      x - w, y, // control point 2
+      x - w * 0.7, y + h * 0.5 // end point
+    );
+    // Bottom point
+    ctx.bezierCurveTo(
+      x - w * 0.5, y + h, // control point 1
+      x, y + h * 1.2, // control point 2
+      x, y + h * 1.2 // end point
+    );
+    // Right side mirror
+    ctx.bezierCurveTo(
+      x, y + h * 1.2, // control point 1
+      x + w * 0.5, y + h, // control point 2
+      x + w * 0.7, y + h * 0.5 // end point
+    );
+    ctx.bezierCurveTo(
+      x + w, y, // control point 1
+      x + w * 0.35, y - h * 0.5, // control point 2
+      x, y // end point
+    );
     ctx.closePath();
     ctx.stroke();
     ctx.restore();
@@ -80,21 +130,23 @@ function distance(p1: { x: number; y: number }, p2: { x: number; y: number }) {
   return Math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2);
 }
 
-// Improved face shape classifier using facial landmarks
+// Improved face shape classifier using facial landmarks and referencing example images
 function classifyFaceShape(landmarks: faceapi.FaceLandmarks68): ShapeType {
   const jaw = landmarks.getJawOutline();
   const leftJaw = jaw[0];
   const rightJaw = jaw[16];
   const chin = jaw[8];
   
-  // Use eyebrows to approximate forehead width
+  // Get key facial points
   const leftBrow = landmarks.getLeftEyeBrow()[0];
   const rightBrow = landmarks.getRightEyeBrow()[4];
+  const leftEye = landmarks.getLeftEye()[0];
+  const rightEye = landmarks.getRightEye()[3];
   
   // Find midpoint between eyebrows (approximate forehead center)
   const foreheadMid = {
     x: (leftBrow.x + rightBrow.x) / 2,
-    y: (leftBrow.y + rightBrow.y) / 2,
+    y: (leftBrow.y + rightBrow.y) / 2 - 5, // Adjust slightly upward
   };
   
   // Cheekbones: use points 3 and 13 from jaw (approximately at cheek level)
@@ -104,84 +156,117 @@ function classifyFaceShape(landmarks: faceapi.FaceLandmarks68): ShapeType {
   // Calculate key measurements
   const jawWidth = distance(leftJaw, rightJaw);
   const cheekboneWidth = distance(leftCheekbone, rightCheekbone);
-  const foreheadWidth = distance(leftBrow, rightBrow);
-  const faceLength = distance(foreheadMid, chin);
-  const jawline = calculateJawlineCurve(jaw);
+  const foreheadWidth = distance(leftBrow, rightBrow) * 1.15; // Adjust for forehead width
+  const faceLength = distance(foreheadMid, chin) * 1.1; // Adjust for full forehead height
   
-  // Calculate jawline curve (higher values = more angular)
+  // Get more jaw points for better classification
+  const leftJawMid = jaw[4]; // Mid jaw on left side
+  const rightJawMid = jaw[12]; // Mid jaw on right side
+  const jawMidWidth = distance(leftJawMid, rightJawMid);
+  
+  // Calculate jawline shape
   const jawAngle = calculateJawAngle(jaw);
-  
-  // Calculate face width at different heights
-  const topThird = foreheadWidth;
-  const middleThird = cheekboneWidth;
-  const bottomThird = jawWidth;
+  const jawCurve = calculateJawlineCurve(jaw);
   
   // Calculate ratios
   const lengthToWidthRatio = faceLength / cheekboneWidth;
   const foreheadToJawRatio = foreheadWidth / jawWidth;
   const cheekToJawRatio = cheekboneWidth / jawWidth;
   const cheekToForeheadRatio = cheekboneWidth / foreheadWidth;
+  const jawToMidJawRatio = jawWidth / jawMidWidth;
   
-  // Log values for debugging
-  console.log({
+  // Calculate face widths at different levels
+  const topThird = foreheadWidth;
+  const middleThird = cheekboneWidth;
+  const bottomThird = jawWidth;
+  
+  // Calculate face proportions
+  const topToMiddleRatio = topThird / middleThird;
+  const bottomToMiddleRatio = bottomThird / middleThird;
+  
+  console.log("Face Measurements:", {
     jawWidth,
     cheekboneWidth,
     foreheadWidth,
     faceLength,
-    jawline,
+    jawCurve,
     jawAngle,
     lengthToWidthRatio,
     foreheadToJawRatio,
     cheekToJawRatio,
-    cheekToForeheadRatio
+    cheekToForeheadRatio,
+    jawToMidJawRatio,
+    topToMiddleRatio,
+    bottomToMiddleRatio
   });
   
-  // IMPROVED CLASSIFICATION LOGIC
+  // IMPROVED CLASSIFICATION LOGIC BASED ON SAMPLE IMAGES
   
-  // OVAL: Length is about 1.5x width, face gently tapers toward chin, curved jawline
+  // ROUND: Face length and width are similar, curved jawline, rounded chin
   if (
-    lengthToWidthRatio > 1.3 && 
-    lengthToWidthRatio < 1.7 &&
+    lengthToWidthRatio < 1.25 &&
+    jawCurve < 0.15 &&
+    topToMiddleRatio > 0.9 && 
+    topToMiddleRatio < 1.1 &&
+    bottomToMiddleRatio > 0.9 &&
+    bottomToMiddleRatio < 1.1 && 
+    jawAngle < 0.15
+  ) {
+    return "round";
+  }
+  
+  // OVAL: Length is greater than width, gentle tapering to chin, smooth jawline
+  if (
+    lengthToWidthRatio > 1.25 && 
+    lengthToWidthRatio < 1.75 &&
+    jawCurve < 0.2 &&
     foreheadToJawRatio > 0.9 &&
-    foreheadToJawRatio < 1.2 &&
-    jawAngle < 0.2
+    foreheadToJawRatio < 1.15 &&
+    cheekToJawRatio > 1.0 &&
+    cheekToJawRatio < 1.3 &&
+    jawAngle < 0.25
   ) {
     return "oval";
   }
   
   // SQUARE: Width and height similar, strong jawline, forehead and jaw widths similar
   if (
-    lengthToWidthRatio < 1.3 &&
+    lengthToWidthRatio < 1.35 &&
     foreheadToJawRatio > 0.9 &&
     foreheadToJawRatio < 1.1 &&
-    jawAngle > 0.3 &&
+    jawAngle > 0.25 &&
+    jawToMidJawRatio < 1.15 &&
     Math.abs(bottomThird - topThird) < bottomThird * 0.15
   ) {
     return "square";
   }
   
-  // HEART: Wider at forehead, narrower at jaw
+  // HEART: Wider at forehead, narrower at jaw, may have pointed chin
   if (
     foreheadToJawRatio > 1.2 &&
-    cheekToJawRatio > 1.1 &&
-    cheekToForeheadRatio < 0.95
+    cheekToJawRatio > 1.15 &&
+    topToMiddleRatio > 0.9 &&
+    bottomToMiddleRatio < 0.85
   ) {
     return "heart";
   }
   
-  // DIAMOND: Narrow forehead, wide cheekbones, narrow jaw
+  // DIAMOND: Narrow forehead, wide cheekbones, narrow jaw, angular features
   if (
     cheekToForeheadRatio > 1.1 &&
     cheekToJawRatio > 1.1 &&
-    lengthToWidthRatio > 1.3
+    topToMiddleRatio < 0.9 &&
+    bottomToMiddleRatio < 0.9 &&
+    lengthToWidthRatio > 1.25
   ) {
     return "diamond";
   }
   
-  // TRIANGLE: Narrow forehead, wider jaw
+  // TRIANGLE: Narrow forehead, wider jaw, angular jawline
   if (
     foreheadToJawRatio < 0.9 &&
-    cheekToForeheadRatio > 1.05 &&
+    topToMiddleRatio < 0.95 &&
+    bottomToMiddleRatio > 1.05 &&
     jawWidth > foreheadWidth
   ) {
     return "triangle";
@@ -255,6 +340,7 @@ export const FaceShapeOverlay: React.FC = () => {
   const [detecting, setDetecting] = useState(true);
   const [modelLoaded, setModelLoaded] = useState(false);
   const [detectedShape, setDetectedShape] = useState<ShapeType | null>(null);
+  const [showShapeInfo, setShowShapeInfo] = useState(false);
 
   // Load models
   useEffect(() => {
@@ -397,14 +483,28 @@ export const FaceShapeOverlay: React.FC = () => {
             : "Looking for a face…"}
         </span>
       </div>
+      
       {detectedShape && (
-        <div className="mt-4 text-center text-lg font-bold text-gray-700 bg-white bg-opacity-80 rounded px-4 py-2 shadow-md">
-          Your face shape:{" "}
-          <span style={{ color: shapeColors[detectedShape] }}>
-            {detectedShape.charAt(0).toUpperCase() + detectedShape.slice(1)}
-          </span>
+        <div className="mt-4 text-center bg-white bg-opacity-80 rounded-lg px-6 py-3 shadow-md">
+          <div className="text-lg font-bold text-gray-800">
+            Your face shape:{" "}
+            <span style={{ color: shapeColors[detectedShape] }}>
+              {detectedShape.charAt(0).toUpperCase() + detectedShape.slice(1)}
+            </span>
+          </div>
+          <button
+            onClick={() => setShowShapeInfo(!showShapeInfo)}
+            className="mt-2 text-sm text-blue-600 hover:text-blue-800 transition-colors"
+          >
+            {showShapeInfo ? "Hide details" : "Learn more about your face shape"}
+          </button>
         </div>
       )}
+
+      {detectedShape && showShapeInfo && (
+        <FaceShapeInfo shapeType={detectedShape} onClose={() => setShowShapeInfo(false)} />
+      )}
+      
       {!detectedShape && modelLoaded && (
         <div className="mt-4 text-center text-base text-gray-600 bg-white bg-opacity-70 rounded px-3 py-1 shadow-sm">
           Position your face in the frame to analyze its shape!
