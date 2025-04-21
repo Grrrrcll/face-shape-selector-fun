@@ -18,7 +18,7 @@ const shapeColors: Record<ShapeType, string> = {
 
 const shapeDrawers: Record<
   ShapeType,
-  (ctx: CanvasRenderingContext2D, box: faceapi.FaceDetection["box"]) => void
+  (ctx: CanvasRenderingContext2D, box: faceapi.IBox) => void
 > = {
   oval: (ctx, box) => {
     // Draw an oval around the face
@@ -129,27 +129,33 @@ export const FaceShapeOverlay: React.FC<Props> = ({ shape }) => {
           videoRef.current.readyState === 4 &&
           canvasRef.current
         ) {
-          const detection = await faceapi
-            .detectSingleFace(
+          try {
+            const detection = await faceapi.detectSingleFace(
               videoRef.current,
-              new faceapi.TinyFaceDetectorOptions({ inputSize: 224 }),
-            )
-            .withBox();
-          // Clear canvas
-          const ctx = canvasRef.current.getContext("2d");
-          ctx?.clearRect(
-            0,
-            0,
-            canvasRef.current.width,
-            canvasRef.current.height,
-          );
-          // Draw overlay if detected
-          if (detection && ctx) {
-            ctx.lineWidth = 4;
-            ctx.strokeStyle = shapeColors[shape];
-            ctx.shadowColor = "#00000080";
-            ctx.shadowBlur = 10;
-            shapeDrawers[shape](ctx, detection.box);
+              new faceapi.TinyFaceDetectorOptions({ inputSize: 224 })
+            );
+            
+            // Clear canvas
+            const ctx = canvasRef.current.getContext("2d");
+            if (ctx) {
+              ctx.clearRect(
+                0,
+                0,
+                canvasRef.current.width,
+                canvasRef.current.height,
+              );
+              
+              // Draw overlay if detected
+              if (detection && ctx) {
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = shapeColors[shape];
+                ctx.shadowColor = "#00000080";
+                ctx.shadowBlur = 10;
+                shapeDrawers[shape](ctx, detection.box);
+              }
+            }
+          } catch (err) {
+            console.error("Error in face detection:", err);
           }
         }
         await new Promise((r) => setTimeout(r, 80));

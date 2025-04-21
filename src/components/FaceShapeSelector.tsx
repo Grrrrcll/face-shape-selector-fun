@@ -1,7 +1,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
-import { Diamond, Heart, Square, Triangle, Ellipse } from "lucide-react";
+import { Diamond, Heart, Square, Triangle, Circle } from "lucide-react";
 
 // The icons used here are from Lucide, corresponding closely to the shapes.
 type ShapeType = "oval" | "square" | "triangle" | "diamond" | "heart";
@@ -9,7 +9,7 @@ const allShapes: { label: string; type: ShapeType; icon: React.ReactNode }[] = [
   {
     label: "Oval",
     type: "oval",
-    icon: <Ellipse className="w-7 h-7" />,
+    icon: <Circle className="w-7 h-7" />,
   },
   {
     label: "Square",
