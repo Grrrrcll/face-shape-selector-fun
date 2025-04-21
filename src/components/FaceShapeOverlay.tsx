@@ -18,7 +18,7 @@ const shapeColors: Record<ShapeType, string> = {
 
 const shapeDrawers: Record<
   ShapeType,
-  (ctx: CanvasRenderingContext2D, box: faceapi.IBox) => void
+  (ctx: CanvasRenderingContext2D, box: faceapi.Box) => void
 > = {
   oval: (ctx, box) => {
     // Draw an oval around the face
@@ -86,16 +86,21 @@ export const FaceShapeOverlay: React.FC<Props> = ({ shape }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [detecting, setDetecting] = useState(true);
+  const [modelLoaded, setModelLoaded] = useState(false);
 
   // Load models
   useEffect(() => {
     async function loadModels() {
       try {
+        // Update model URL to use githubusercontent which is more reliable
         await faceapi.nets.tinyFaceDetector.loadFromUri(
-          "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights",
+          "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights"
         );
+        console.log("Face detection model loaded successfully");
+        setModelLoaded(true);
       } catch (err) {
-        setError("Failed to load face detection models.");
+        console.error("Failed to load face detection models:", err);
+        setError("Failed to load face detection models. Please try again later.");
       }
     }
     loadModels();
@@ -110,20 +115,32 @@ export const FaceShapeOverlay: React.FC<Props> = ({ shape }) => {
             video: { facingMode: "user" },
           });
           videoRef.current.srcObject = stream;
-        } catch {
-          setError("Unable to access webcam.");
+          console.log("Webcam access successful");
+        } catch (err) {
+          console.error("Webcam access error:", err);
+          setError("Unable to access webcam. Please check your camera permissions and ensure no other applications are using your camera.");
         }
       }
     }
     start();
+
+    // Cleanup function to stop the webcam when component unmounts
+    return () => {
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        const tracks = stream.getTracks();
+        tracks.forEach(track => track.stop());
+      }
+    };
   }, []);
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
     let stop = false;
+    
     async function detectFace() {
       setDetecting(true);
-      while (!stop) {
+      while (!stop && modelLoaded) {
         if (
           videoRef.current &&
           videoRef.current.readyState === 4 &&
@@ -161,12 +178,16 @@ export const FaceShapeOverlay: React.FC<Props> = ({ shape }) => {
         await new Promise((r) => setTimeout(r, 80));
       }
     }
-    detectFace();
+    
+    if (modelLoaded) {
+      detectFace();
+    }
+    
     return () => {
       stop = true;
       clearInterval(interval);
     };
-  }, [shape]);
+  }, [shape, modelLoaded]);
 
   // Set canvas size to match video
   const setCanvasDimensions = () => {
@@ -178,7 +199,15 @@ export const FaceShapeOverlay: React.FC<Props> = ({ shape }) => {
 
   if (error) {
     return (
-      <div className="p-4 text-red-600 font-semibold">{error}</div>
+      <div className="p-4 text-red-600 font-semibold bg-white bg-opacity-90 rounded-lg shadow-lg">
+        <p>{error}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+        >
+          Try Again
+        </button>
+      </div>
     );
   }
 
@@ -199,7 +228,7 @@ export const FaceShapeOverlay: React.FC<Props> = ({ shape }) => {
         />
         {detecting && (
           <span className="absolute left-2 top-2 text-xs text-white bg-black bg-opacity-60 px-2 py-1 rounded">
-            {error ? "Not available" : "Face tracking…"}
+            {!modelLoaded ? "Loading model..." : error ? "Not available" : "Face tracking…"}
           </span>
         )}
       </div>
