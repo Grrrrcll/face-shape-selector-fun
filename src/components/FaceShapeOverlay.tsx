@@ -4,10 +4,6 @@ import * as faceapi from "face-api.js";
 
 type ShapeType = "oval" | "square" | "triangle" | "diamond" | "heart";
 
-interface Props {
-  shape: ShapeType;
-}
-
 const shapeColors: Record<ShapeType, string> = {
   oval: "#ffffff",
   square: "#3b82f6",
@@ -21,7 +17,6 @@ const shapeDrawers: Record<
   (ctx: CanvasRenderingContext2D, box: faceapi.Box) => void
 > = {
   oval: (ctx, box) => {
-    // Draw an oval around the face
     ctx.save();
     ctx.beginPath();
     ctx.ellipse(
@@ -65,7 +60,6 @@ const shapeDrawers: Record<
   heart: (ctx, box) => {
     ctx.save();
     ctx.beginPath();
-    // Approximate heart shape using Bezier curves
     const x = box.x + box.width / 2;
     const y = box.y + box.height * 0.40;
     const w = box.width / 2;
@@ -81,25 +75,102 @@ const shapeDrawers: Record<
   },
 };
 
-export const FaceShapeOverlay: React.FC<Props> = ({ shape }) => {
+// Helper function to calculate Euclidean distance between two points
+function distance(p1: { x: number; y: number }, p2: { x: number; y: number }) {
+  return Math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2);
+}
+
+// Very simple classifier based on positions of landmarks.
+// For a real-world app, more sophisticated ML should be used.
+function classifyFaceShape(landmarks: faceapi.FaceLandmarks68): ShapeType {
+  const jaw = landmarks.getJawOutline();
+  const leftJaw = jaw[0];
+  const rightJaw = jaw[16];
+  const chin = jaw[8];
+
+  // Forehead is approximated using midpoint between eyebrows points
+  const leftBrow = landmarks.getLeftEyeBrow()[0];
+  const rightBrow = landmarks.getRightEyeBrow()[4];
+  const middleBrow = {
+    x: (leftBrow.x + rightBrow.x) / 2,
+    y: (leftBrow.y + rightBrow.y) / 2,
+  };
+
+  // Cheekbones: use points 3 and 13 (just above jaw on each side)
+  const leftCheekbone = jaw[3];
+  const rightCheekbone = jaw[13];
+
+  const faceWidth = distance(leftJaw, rightJaw);
+  const cheekboneWidth = distance(leftCheekbone, rightCheekbone);
+  const foreheadWidth = distance(leftBrow, rightBrow);
+  const faceLength = distance(middleBrow, chin);
+
+  // Ratio helpers
+  const fw_cw = foreheadWidth / cheekboneWidth;
+  const jaw_cheek = faceWidth / cheekboneWidth;
+  const fl_cw = faceLength / cheekboneWidth;
+
+  // "Classic" rules (very simple, threshold-tuned by hand)
+  if (
+    fl_cw > 1.45 &&
+    Math.abs(cheekboneWidth - foreheadWidth) < 10 &&
+    Math.abs(cheekboneWidth - faceWidth) < 10
+  ) {
+    return "oval";
+  }
+  if (
+    Math.abs(foreheadWidth - cheekboneWidth) < 10 &&
+    Math.abs(cheekboneWidth - faceWidth) < 10 &&
+    Math.abs(faceLength - faceWidth) < 20
+  ) {
+    return "square";
+  }
+  if (
+    foreheadWidth < cheekboneWidth &&
+    faceWidth < cheekboneWidth &&
+    fl_cw < 1.3
+  ) {
+    return "diamond";
+  }
+  if (
+    foreheadWidth > cheekboneWidth &&
+    faceWidth < cheekboneWidth &&
+    fl_cw > 1.3
+  ) {
+    return "heart";
+  }
+  // Approximate triangle: wide jaw, short forehead
+  if (
+    faceWidth > cheekboneWidth &&
+    cheekboneWidth > foreheadWidth &&
+    fl_cw < 1.35
+  ) {
+    return "triangle";
+  }
+  // Fallback
+  return "oval";
+}
+
+export const FaceShapeOverlay: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [detecting, setDetecting] = useState(true);
   const [modelLoaded, setModelLoaded] = useState(false);
+  const [detectedShape, setDetectedShape] = useState<ShapeType | null>(null);
 
   // Load models
   useEffect(() => {
     async function loadModels() {
       try {
-        // Update model URL to use githubusercontent which is more reliable
         await faceapi.nets.tinyFaceDetector.loadFromUri(
           "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights"
         );
-        console.log("Face detection model loaded successfully");
+        await faceapi.nets.faceLandmark68TinyNet.loadFromUri(
+          "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights"
+        );
         setModelLoaded(true);
       } catch (err) {
-        console.error("Failed to load face detection models:", err);
         setError("Failed to load face detection models. Please try again later.");
       }
     }
@@ -115,16 +186,14 @@ export const FaceShapeOverlay: React.FC<Props> = ({ shape }) => {
             video: { facingMode: "user" },
           });
           videoRef.current.srcObject = stream;
-          console.log("Webcam access successful");
         } catch (err) {
-          console.error("Webcam access error:", err);
-          setError("Unable to access webcam. Please check your camera permissions and ensure no other applications are using your camera.");
+          setError(
+            "Unable to access webcam. Please check your camera permissions and ensure no other applications are using your camera."
+          );
         }
       }
     }
     start();
-
-    // Cleanup function to stop the webcam when component unmounts
     return () => {
       if (videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
@@ -135,10 +204,8 @@ export const FaceShapeOverlay: React.FC<Props> = ({ shape }) => {
   }, []);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
     let stop = false;
-    
-    async function detectFace() {
+    async function detectFaceShape() {
       setDetecting(true);
       while (!stop && modelLoaded) {
         if (
@@ -146,48 +213,44 @@ export const FaceShapeOverlay: React.FC<Props> = ({ shape }) => {
           videoRef.current.readyState === 4 &&
           canvasRef.current
         ) {
+          const ctx = canvasRef.current.getContext("2d");
+          // Always clear the canvas
+          ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+
           try {
-            const detection = await faceapi.detectSingleFace(
-              videoRef.current,
-              new faceapi.TinyFaceDetectorOptions({ inputSize: 224 })
-            );
-            
-            // Clear canvas
-            const ctx = canvasRef.current.getContext("2d");
-            if (ctx) {
-              ctx.clearRect(
-                0,
-                0,
-                canvasRef.current.width,
-                canvasRef.current.height,
-              );
-              
-              // Draw overlay if detected
-              if (detection && ctx) {
-                ctx.lineWidth = 4;
-                ctx.strokeStyle = shapeColors[shape];
-                ctx.shadowColor = "#00000080";
-                ctx.shadowBlur = 10;
-                shapeDrawers[shape](ctx, detection.box);
-              }
+            const detection = await faceapi
+              .detectSingleFace(
+                videoRef.current,
+                new faceapi.TinyFaceDetectorOptions({ inputSize: 224 })
+              )
+              .withFaceLandmarks(true);
+
+            if (detection && ctx) {
+              const landmarks = detection.landmarks as faceapi.FaceLandmarks68;
+              const shape = classifyFaceShape(landmarks);
+              setDetectedShape(shape);
+
+              ctx.lineWidth = 4;
+              ctx.strokeStyle = shapeColors[shape];
+              ctx.shadowColor = "#00000080";
+              ctx.shadowBlur = 10;
+
+              shapeDrawers[shape](ctx, detection.detection.box);
+            } else {
+              setDetectedShape(null);
             }
           } catch (err) {
-            console.error("Error in face detection:", err);
+            // If detection fails for a frame, skip but don't crash
           }
         }
         await new Promise((r) => setTimeout(r, 80));
       }
     }
-    
-    if (modelLoaded) {
-      detectFace();
-    }
-    
+    if (modelLoaded) detectFaceShape();
     return () => {
       stop = true;
-      clearInterval(interval);
     };
-  }, [shape, modelLoaded]);
+  }, [modelLoaded]);
 
   // Set canvas size to match video
   const setCanvasDimensions = () => {
@@ -201,7 +264,7 @@ export const FaceShapeOverlay: React.FC<Props> = ({ shape }) => {
     return (
       <div className="p-4 text-red-600 font-semibold bg-white bg-opacity-90 rounded-lg shadow-lg">
         <p>{error}</p>
-        <button 
+        <button
           onClick={() => window.location.reload()}
           className="mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
         >
@@ -226,15 +289,29 @@ export const FaceShapeOverlay: React.FC<Props> = ({ shape }) => {
           ref={canvasRef}
           className="absolute left-0 top-0 w-full h-full pointer-events-none"
         />
-        {detecting && (
-          <span className="absolute left-2 top-2 text-xs text-white bg-black bg-opacity-60 px-2 py-1 rounded">
-            {!modelLoaded ? "Loading model..." : error ? "Not available" : "Face tracking…"}
+        <span className="absolute left-2 top-2 text-xs text-white bg-black bg-opacity-60 px-2 py-1 rounded">
+          {!modelLoaded
+            ? "Loading model..."
+            : error
+            ? "Not available"
+            : detectedShape
+            ? "Face detected"
+            : "Looking for a face…"}
+        </span>
+      </div>
+      {detectedShape && (
+        <div className="mt-4 text-center text-lg font-bold text-gray-700 bg-white bg-opacity-80 rounded px-4 py-2 shadow-md">
+          Your face shape:{" "}
+          <span style={{ color: shapeColors[detectedShape] }}>
+            {detectedShape.charAt(0).toUpperCase() + detectedShape.slice(1)}
           </span>
-        )}
-      </div>
-      <div className="mt-4 text-center text-base font-bold text-gray-700 bg-white bg-opacity-70 rounded px-3 py-1 shadow-md">
-        Try cycling shapes on your face to see what fits your face best!
-      </div>
+        </div>
+      )}
+      {!detectedShape && modelLoaded && (
+        <div className="mt-4 text-center text-base text-gray-600 bg-white bg-opacity-70 rounded px-3 py-1 shadow-sm">
+          Position your face in the frame to analyze its shape!
+        </div>
+      )}
     </div>
   );
 };
