@@ -164,6 +164,7 @@ function classifyFaceShape(landmarks: faceapi.FaceLandmarks68): ShapeType {
   
   const jawAngle = calculateJawAngle(jaw);
   const jawCurve = calculateJawlineCurve(jaw);
+  const jawSquareness = calculateJawSquareness(jaw);
   
   const lengthToWidthRatio = faceLength / cheekboneWidth;
   const foreheadToJawRatio = foreheadWidth / jawWidth;
