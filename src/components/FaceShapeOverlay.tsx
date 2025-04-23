@@ -197,20 +197,18 @@ function classifyFaceShape(landmarks: faceapi.FaceLandmarks68): ShapeType {
   });
   
   if (
-    Math.abs(jawWidth - cheekboneWidth) / jawWidth < 0.12 &&
-    Math.abs(jawWidth - foreheadWidth) / jawWidth < 0.12 &&
-    Math.abs(foreheadWidth - cheekboneWidth) / foreheadWidth < 0.12 &&
-    jawAngle > 0.25 &&
-    jawSquareness > 0.65 &&
-    jawCurve > 0.05 && jawCurve < 0.18 &&
-    lengthToWidthRatio > 1.0 && lengthToWidthRatio < 1.3 &&
-    bottomToMiddleRatio > 0.95 && bottomToMiddleRatio < 1.15
+    jawSquareness > 0.68 &&
+    Math.abs(jawWidth - cheekboneWidth) / jawWidth < 0.15 &&
+    Math.abs(foreheadWidth - cheekboneWidth) / foreheadWidth < 0.15 &&
+    bottomToMiddleRatio > 0.95 && 
+    lengthToWidthRatio < 1.2 &&
+    jawCurve < 0.22
   ) {
     return "square";
   }
   
   if (
-    lengthToWidthRatio < 1.18 &&
+    lengthToWidthRatio < 1.1 &&
     jawCurve < 0.14 &&
     jawAngle < 0.17 &&
     jawSquareness < 0.60
@@ -219,30 +217,16 @@ function classifyFaceShape(landmarks: faceapi.FaceLandmarks68): ShapeType {
   }
   
   if (
-    lengthToWidthRatio > 1.18 &&
-    lengthToWidthRatio < 1.6 &&
-    jawCurve < 0.22 &&
-    cheekToJawRatio > 1.08 && cheekToJawRatio < 1.25 &&
-    jawAngle > 0.13 && jawAngle < 0.24 &&
-    jawSquareness < 0.7
-  ) {
-    return "oval";
-  }
-  
-  if (
-    foreheadToJawRatio < 0.81 &&
-    jawWidth > foreheadWidth * 1.18 &&
-    bottomToMiddleRatio > 1.15 &&
-    jawAngle > 0.16 &&
-    jawCurve > 0.07 && jawCurve < 0.26 &&
-    jawSquareness < 0.72
+    foreheadToJawRatio < 0.88 &&
+    jawWidth > foreheadWidth * 1.12 &&
+    bottomToMiddleRatio > 1.08
   ) {
     return "triangle";
   }
   
   if (
-    foreheadToJawRatio > 1.18 &&
-    cheekToJawRatio > 1.14 &&
+    foreheadToJawRatio > 1.15 &&
+    cheekToJawRatio > 1.12 &&
     lengthToWidthRatio < 1.38 &&
     topToMiddleRatio > 0.9 &&
     bottomToMiddleRatio < 0.88
@@ -251,16 +235,38 @@ function classifyFaceShape(landmarks: faceapi.FaceLandmarks68): ShapeType {
   }
   
   if (
-    cheekToForeheadRatio > 1.17 &&
-    cheekToJawRatio > 1.17 &&
-    topToMiddleRatio < 0.87 &&
-    bottomToMiddleRatio < 0.92 &&
+    cheekToForeheadRatio > 1.13 &&
+    cheekToJawRatio > 1.13 &&
+    topToMiddleRatio < 0.90 &&
+    bottomToMiddleRatio < 0.94 &&
     lengthToWidthRatio > 1.13
   ) {
     return "diamond";
   }
   
-  return "oval";
+  if (
+    lengthToWidthRatio > 1.12 && 
+    lengthToWidthRatio < 1.5 &&
+    jawCurve < 0.25 &&
+    jawSquareness < 0.68
+  ) {
+    return "oval";
+  }
+  
+  const ratios = [
+    { shape: "square", score: jawSquareness > 0.65 ? 5 : 0 },
+    { shape: "round", score: lengthToWidthRatio < 1.05 ? 4 : 0 },
+    { shape: "triangle", score: foreheadToJawRatio < 0.9 ? 3 : 0 },
+    { shape: "heart", score: foreheadToJawRatio > 1.1 ? 3 : 0 },
+    { shape: "diamond", score: cheekToForeheadRatio > 1.1 && cheekToJawRatio > 1.1 ? 4 : 0 },
+    { shape: "oval", score: 1 } // default lowest score
+  ];
+  
+  const bestMatch = ratios.reduce((prev, current) => 
+    (current.score > prev.score) ? current : prev
+  );
+  
+  return bestMatch.shape as ShapeType;
 }
 
 function calculateJawlineCurve(jawPoints: Array<{ x: number; y: number }>): number {
