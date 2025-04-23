@@ -200,7 +200,20 @@ function classifyFaceShape(landmarks: faceapi.FaceLandmarks68): ShapeType {
     bottomToMiddleRatio
   });
   
-  // IMPROVED CLASSIFICATION LOGIC BASED ON SAMPLE IMAGES
+  // IMPROVED CLASSIFICATION LOGIC BASED ON SAMPLE IMAGES AND USER FEEDBACK
+  
+  // SQUARE: Width and height similar, strong jawline, forehead and jaw widths similar
+  // Updated to give square shape higher priority and improved detection criteria
+  if (
+    (lengthToWidthRatio < 1.4) &&
+    (Math.abs(foreheadToJawRatio - 1) < 0.15) && // Forehead and jaw width are very similar
+    (jawAngle > 0.2) && // More angular jaw
+    (jawToMidJawRatio < 1.2) && // Jaw width consistent
+    (Math.abs(bottomThird - topThird) < bottomThird * 0.2) && // Forehead and jaw widths similar
+    (bottomToMiddleRatio > 0.9) // Jaw not much narrower than cheeks
+  ) {
+    return "square";
+  }
   
   // ROUND: Face length and width are similar, curved jawline, rounded chin
   if (
@@ -229,18 +242,6 @@ function classifyFaceShape(landmarks: faceapi.FaceLandmarks68): ShapeType {
     return "oval";
   }
   
-  // SQUARE: Width and height similar, strong jawline, forehead and jaw widths similar
-  if (
-    lengthToWidthRatio < 1.35 &&
-    foreheadToJawRatio > 0.9 &&
-    foreheadToJawRatio < 1.1 &&
-    jawAngle > 0.25 &&
-    jawToMidJawRatio < 1.15 &&
-    Math.abs(bottomThird - topThird) < bottomThird * 0.15
-  ) {
-    return "square";
-  }
-  
   // HEART: Wider at forehead, narrower at jaw, may have pointed chin
   if (
     foreheadToJawRatio > 1.2 &&
@@ -264,10 +265,10 @@ function classifyFaceShape(landmarks: faceapi.FaceLandmarks68): ShapeType {
   
   // TRIANGLE: Narrow forehead, wider jaw, angular jawline
   if (
-    foreheadToJawRatio < 0.9 &&
-    topToMiddleRatio < 0.95 &&
-    bottomToMiddleRatio > 1.05 &&
-    jawWidth > foreheadWidth
+    foreheadToJawRatio < 0.85 &&
+    topToMiddleRatio < 0.9 &&
+    bottomToMiddleRatio > 1.1 &&
+    jawWidth > foreheadWidth * 1.15
   ) {
     return "triangle";
   }

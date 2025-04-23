@@ -1,4 +1,3 @@
-
 import React from "react";
 
 type ShapeType = "oval" | "square" | "triangle" | "diamond" | "heart" | "round";
@@ -11,10 +10,10 @@ interface FaceShapeInfoProps {
 const shapeImages: Record<ShapeType, string> = {
   oval: "/lovable-uploads/a94a4dec-56b8-47b7-8313-fbfdf22e0002.png",
   round: "/lovable-uploads/afa6c80b-d94d-4176-9333-38f7a4ebc359.png",
-  square: "/lovable-uploads/f7f96fae-fcf4-4eb8-8c69-fda4f53605a6.png",
+  square: "/lovable-uploads/084d099d-3d37-4991-9ef6-b97092a47b3e.png",
   diamond: "/lovable-uploads/a27b8790-32f8-477c-aaa9-942289a267ba.png",
-  triangle: "/lovable-uploads/a27b8790-32f8-477c-aaa9-942289a267ba.png", // Using diamond as placeholder
-  heart: "/lovable-uploads/f7f96fae-fcf4-4eb8-8c69-fda4f53605a6.png", // Using square as placeholder
+  triangle: "/lovable-uploads/a27b8790-32f8-477c-aaa9-942289a267ba.png",
+  heart: "/lovable-uploads/f7f96fae-fcf4-4eb8-8c69-fda4f53605a6.png"
 };
 
 const shapeDescriptions: Record<ShapeType, { description: string; characteristics: string[]; hairStyles: string[] }> = {
