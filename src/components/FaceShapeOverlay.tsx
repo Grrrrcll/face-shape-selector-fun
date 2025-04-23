@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import * as faceapi from "face-api.js";
 import { FaceShapeInfo } from "./FaceShapeInfo";
@@ -49,7 +48,6 @@ const shapeDrawers: Record<
   square: (ctx, box) => {
     ctx.save();
     ctx.beginPath();
-    // Draw a slightly rounded rectangle for square face shape
     const radius = box.width * 0.05;
     ctx.moveTo(box.x + radius, box.y);
     ctx.lineTo(box.x + box.width - radius, box.y);
@@ -67,10 +65,9 @@ const shapeDrawers: Record<
   triangle: (ctx, box) => {
     ctx.save();
     ctx.beginPath();
-    // Adjust triangle to better match an inverted triangle face shape
-    ctx.moveTo(box.x + box.width / 2, box.y); // Top center
-    ctx.lineTo(box.x, box.y + box.height * 0.8); // Bottom left
-    ctx.lineTo(box.x + box.width, box.y + box.height * 0.8); // Bottom right
+    ctx.moveTo(box.x + box.width / 2, box.y);
+    ctx.lineTo(box.x, box.y + box.height * 0.8);
+    ctx.lineTo(box.x + box.width, box.y + box.height * 0.8);
     ctx.closePath();
     ctx.stroke();
     ctx.restore();
@@ -78,10 +75,10 @@ const shapeDrawers: Record<
   diamond: (ctx, box) => {
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(box.x + box.width / 2, box.y + box.height * 0.1); // Top
-    ctx.lineTo(box.x + box.width * 0.15, box.y + box.height / 2); // Left
-    ctx.lineTo(box.x + box.width / 2, box.y + box.height * 0.9); // Bottom
-    ctx.lineTo(box.x + box.width * 0.85, box.y + box.height / 2); // Right
+    ctx.moveTo(box.x + box.width / 2, box.y + box.height * 0.1);
+    ctx.lineTo(box.x + box.width * 0.15, box.y + box.height / 2);
+    ctx.lineTo(box.x + box.width / 2, box.y + box.height * 0.9);
+    ctx.lineTo(box.x + box.width * 0.85, box.y + box.height / 2);
     ctx.closePath();
     ctx.stroke();
     ctx.restore();
@@ -94,30 +91,26 @@ const shapeDrawers: Record<
     const w = box.width * 0.45;
     const h = box.height * 0.45;
     
-    // Draw top of heart (two arcs)
     ctx.moveTo(x, y);
-    // Left arc
     ctx.bezierCurveTo(
-      x - w * 0.35, y - h * 0.5, // control point 1
-      x - w, y, // control point 2
-      x - w * 0.7, y + h * 0.5 // end point
-    );
-    // Bottom point
-    ctx.bezierCurveTo(
-      x - w * 0.5, y + h, // control point 1
-      x, y + h * 1.2, // control point 2
-      x, y + h * 1.2 // end point
-    );
-    // Right side mirror
-    ctx.bezierCurveTo(
-      x, y + h * 1.2, // control point 1
-      x + w * 0.5, y + h, // control point 2
-      x + w * 0.7, y + h * 0.5 // end point
+      x - w * 0.35, y - h * 0.5,
+      x - w, y,
+      x - w * 0.7, y + h * 0.5
     );
     ctx.bezierCurveTo(
-      x + w, y, // control point 1
-      x + w * 0.35, y - h * 0.5, // control point 2
-      x, y // end point
+      x - w * 0.5, y + h,
+      x, y + h * 1.2,
+      x, y + h * 1.2
+    );
+    ctx.bezierCurveTo(
+      x, y + h * 1.2,
+      x + w * 0.5, y + h,
+      x + w * 0.7, y + h * 0.5
+    );
+    ctx.bezierCurveTo(
+      x + w, y,
+      x + w * 0.35, y - h * 0.5,
+      x, y
     );
     ctx.closePath();
     ctx.stroke();
@@ -125,62 +118,63 @@ const shapeDrawers: Record<
   },
 };
 
-// Helper function to calculate Euclidean distance between two points
 function distance(p1: { x: number; y: number }, p2: { x: number; y: number }) {
   return Math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2);
 }
 
-// Improved face shape classifier using facial landmarks and referencing example images
+function calculateJawSquareness(jawPoints: Array<{ x: number; y: number }>): number {
+  const left = jawPoints[4];
+  const right = jawPoints[12];
+  const chin = jawPoints[8];
+  const avgYSide = (left.y + right.y) / 2;
+  const squareness = 1 - Math.abs(avgYSide - chin.y) / (chin.y - jawPoints[0].y + 1e-4);
+  const sideDist = distance(left, right);
+  const baseDist = distance(jawPoints[0], jawPoints[16]);
+  const straightness = sideDist / baseDist;
+  return (squareness + straightness) / 2;
+}
+
 function classifyFaceShape(landmarks: faceapi.FaceLandmarks68): ShapeType {
   const jaw = landmarks.getJawOutline();
   const leftJaw = jaw[0];
   const rightJaw = jaw[16];
   const chin = jaw[8];
   
-  // Get key facial points
   const leftBrow = landmarks.getLeftEyeBrow()[0];
   const rightBrow = landmarks.getRightEyeBrow()[4];
   const leftEye = landmarks.getLeftEye()[0];
   const rightEye = landmarks.getRightEye()[3];
   
-  // Find midpoint between eyebrows (approximate forehead center)
   const foreheadMid = {
     x: (leftBrow.x + rightBrow.x) / 2,
-    y: (leftBrow.y + rightBrow.y) / 2 - 5, // Adjust slightly upward
+    y: (leftBrow.y + rightBrow.y) / 2 - 5,
   };
   
-  // Cheekbones: use points 3 and 13 from jaw (approximately at cheek level)
   const leftCheekbone = jaw[2];
   const rightCheekbone = jaw[14];
   
-  // Calculate key measurements
   const jawWidth = distance(leftJaw, rightJaw);
   const cheekboneWidth = distance(leftCheekbone, rightCheekbone);
-  const foreheadWidth = distance(leftBrow, rightBrow) * 1.15; // Adjust for forehead width
-  const faceLength = distance(foreheadMid, chin) * 1.1; // Adjust for full forehead height
+  const foreheadWidth = distance(leftBrow, rightBrow) * 1.15;
+  const faceLength = distance(foreheadMid, chin) * 1.1;
   
-  // Get more jaw points for better classification
-  const leftJawMid = jaw[4]; // Mid jaw on left side
-  const rightJawMid = jaw[12]; // Mid jaw on right side
+  const leftJawMid = jaw[4];
+  const rightJawMid = jaw[12];
   const jawMidWidth = distance(leftJawMid, rightJawMid);
   
-  // Calculate jawline shape
   const jawAngle = calculateJawAngle(jaw);
   const jawCurve = calculateJawlineCurve(jaw);
   
-  // Calculate ratios
   const lengthToWidthRatio = faceLength / cheekboneWidth;
   const foreheadToJawRatio = foreheadWidth / jawWidth;
   const cheekToJawRatio = cheekboneWidth / jawWidth;
   const cheekToForeheadRatio = cheekboneWidth / foreheadWidth;
   const jawToMidJawRatio = jawWidth / jawMidWidth;
   
-  // Calculate face widths at different levels
   const topThird = foreheadWidth;
   const middleThird = cheekboneWidth;
   const bottomThird = jawWidth;
   
-  // Calculate face proportions
   const topToMiddleRatio = topThird / middleThird;
   const bottomToMiddleRatio = bottomThird / middleThird;
   
@@ -191,6 +185,7 @@ function classifyFaceShape(landmarks: faceapi.FaceLandmarks68): ShapeType {
     faceLength,
     jawCurve,
     jawAngle,
+    jawSquareness,
     lengthToWidthRatio,
     foreheadToJawRatio,
     cheekToJawRatio,
@@ -200,124 +195,103 @@ function classifyFaceShape(landmarks: faceapi.FaceLandmarks68): ShapeType {
     bottomToMiddleRatio
   });
   
-  // IMPROVED CLASSIFICATION LOGIC BASED ON SAMPLE IMAGES AND USER FEEDBACK
-  
-  // SQUARE: Width and height similar, strong jawline, forehead and jaw widths similar
-  // Updated to give square shape higher priority and improved detection criteria
   if (
-    (lengthToWidthRatio < 1.4) &&
-    (Math.abs(foreheadToJawRatio - 1) < 0.15) && // Forehead and jaw width are very similar
-    (jawAngle > 0.2) && // More angular jaw
-    (jawToMidJawRatio < 1.2) && // Jaw width consistent
-    (Math.abs(bottomThird - topThird) < bottomThird * 0.2) && // Forehead and jaw widths similar
-    (bottomToMiddleRatio > 0.9) // Jaw not much narrower than cheeks
+    Math.abs(jawWidth - cheekboneWidth) / jawWidth < 0.12 &&
+    Math.abs(jawWidth - foreheadWidth) / jawWidth < 0.12 &&
+    Math.abs(foreheadWidth - cheekboneWidth) / foreheadWidth < 0.12 &&
+    jawAngle > 0.25 &&
+    jawSquareness > 0.65 &&
+    jawCurve > 0.05 && jawCurve < 0.18 &&
+    lengthToWidthRatio > 1.0 && lengthToWidthRatio < 1.3 &&
+    bottomToMiddleRatio > 0.95 && bottomToMiddleRatio < 1.15
   ) {
     return "square";
   }
   
-  // ROUND: Face length and width are similar, curved jawline, rounded chin
   if (
-    lengthToWidthRatio < 1.25 &&
-    jawCurve < 0.15 &&
-    topToMiddleRatio > 0.9 && 
-    topToMiddleRatio < 1.1 &&
-    bottomToMiddleRatio > 0.9 &&
-    bottomToMiddleRatio < 1.1 && 
-    jawAngle < 0.15
+    lengthToWidthRatio < 1.18 &&
+    jawCurve < 0.14 &&
+    jawAngle < 0.17 &&
+    jawSquareness < 0.60
   ) {
     return "round";
   }
   
-  // OVAL: Length is greater than width, gentle tapering to chin, smooth jawline
   if (
-    lengthToWidthRatio > 1.25 && 
-    lengthToWidthRatio < 1.75 &&
-    jawCurve < 0.2 &&
-    foreheadToJawRatio > 0.9 &&
-    foreheadToJawRatio < 1.15 &&
-    cheekToJawRatio > 1.0 &&
-    cheekToJawRatio < 1.3 &&
-    jawAngle < 0.25
+    lengthToWidthRatio > 1.18 &&
+    lengthToWidthRatio < 1.6 &&
+    jawCurve < 0.22 &&
+    cheekToJawRatio > 1.08 && cheekToJawRatio < 1.25 &&
+    jawAngle > 0.13 && jawAngle < 0.24 &&
+    jawSquareness < 0.7
   ) {
     return "oval";
   }
   
-  // HEART: Wider at forehead, narrower at jaw, may have pointed chin
   if (
-    foreheadToJawRatio > 1.2 &&
-    cheekToJawRatio > 1.15 &&
-    topToMiddleRatio > 0.9 &&
-    bottomToMiddleRatio < 0.85
-  ) {
-    return "heart";
-  }
-  
-  // DIAMOND: Narrow forehead, wide cheekbones, narrow jaw, angular features
-  if (
-    cheekToForeheadRatio > 1.1 &&
-    cheekToJawRatio > 1.1 &&
-    topToMiddleRatio < 0.9 &&
-    bottomToMiddleRatio < 0.9 &&
-    lengthToWidthRatio > 1.25
-  ) {
-    return "diamond";
-  }
-  
-  // TRIANGLE: Narrow forehead, wider jaw, angular jawline
-  if (
-    foreheadToJawRatio < 0.85 &&
-    topToMiddleRatio < 0.9 &&
-    bottomToMiddleRatio > 1.1 &&
-    jawWidth > foreheadWidth * 1.15
+    foreheadToJawRatio < 0.81 &&
+    jawWidth > foreheadWidth * 1.18 &&
+    bottomToMiddleRatio > 1.15 &&
+    jawAngle > 0.16 &&
+    jawCurve > 0.07 && jawCurve < 0.26 &&
+    jawSquareness < 0.72
   ) {
     return "triangle";
   }
   
-  // Default to oval if no clear match
+  if (
+    foreheadToJawRatio > 1.18 &&
+    cheekToJawRatio > 1.14 &&
+    lengthToWidthRatio < 1.38 &&
+    topToMiddleRatio > 0.9 &&
+    bottomToMiddleRatio < 0.88
+  ) {
+    return "heart";
+  }
+  
+  if (
+    cheekToForeheadRatio > 1.17 &&
+    cheekToJawRatio > 1.17 &&
+    topToMiddleRatio < 0.87 &&
+    bottomToMiddleRatio < 0.92 &&
+    lengthToWidthRatio > 1.13
+  ) {
+    return "diamond";
+  }
+  
   return "oval";
 }
 
-// Calculate jaw curve (returns a value that's higher for more angular jaws)
 function calculateJawlineCurve(jawPoints: Array<{ x: number; y: number }>): number {
-  // We'll use points from the lower half of the jawline
   const lowerJaw = jawPoints.slice(3, 14);
   
-  // Calculate the average distance from points to a straight line between first and last points
   const start = lowerJaw[0];
   const end = lowerJaw[lowerJaw.length - 1];
   
-  // Calculate straight line equation: ax + by + c = 0
   const a = end.y - start.y;
   const b = start.x - end.x;
   const c = end.x * start.y - start.x * end.y;
   
-  // Calculate distances from points to line
   let totalDeviation = 0;
   for (const point of lowerJaw) {
     const distance = Math.abs(a * point.x + b * point.y + c) / Math.sqrt(a * a + b * b);
     totalDeviation += distance;
   }
   
-  // Normalize by jawline width
   return totalDeviation / distance(start, end);
 }
 
-// Calculate jaw angle (higher values = more angular)
 function calculateJawAngle(jawPoints: Array<{ x: number; y: number }>): number {
-  // Get jaw corner points (approximately points 2 and 14)
   const leftCorner = jawPoints[2];
   const rightCorner = jawPoints[14];
   const chin = jawPoints[8];
   
-  // Calculate angles at jaw corners
   const leftAngle = calculateAngle(jawPoints[1], leftCorner, jawPoints[3]);
   const rightAngle = calculateAngle(jawPoints[13], rightCorner, jawPoints[15]);
   
-  // Average of both corners
   return (leftAngle + rightAngle) / 2;
 }
 
-// Calculate angle between three points in radians
 function calculateAngle(
   p1: { x: number; y: number }, 
   p2: { x: number; y: number }, 
@@ -343,7 +317,6 @@ export const FaceShapeOverlay: React.FC = () => {
   const [detectedShape, setDetectedShape] = useState<ShapeType | null>(null);
   const [showShapeInfo, setShowShapeInfo] = useState(false);
 
-  // Load models
   useEffect(() => {
     async function loadModels() {
       try {
@@ -361,7 +334,6 @@ export const FaceShapeOverlay: React.FC = () => {
     loadModels();
   }, []);
 
-  // Start webcam
   useEffect(() => {
     async function start() {
       if (videoRef.current) {
@@ -398,7 +370,6 @@ export const FaceShapeOverlay: React.FC = () => {
           canvasRef.current
         ) {
           const ctx = canvasRef.current.getContext("2d");
-          // Always clear the canvas
           ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
 
           try {
@@ -424,7 +395,6 @@ export const FaceShapeOverlay: React.FC = () => {
               setDetectedShape(null);
             }
           } catch (err) {
-            // If detection fails for a frame, skip but don't crash
             console.error("Error in face detection:", err);
           }
         }
@@ -437,7 +407,6 @@ export const FaceShapeOverlay: React.FC = () => {
     };
   }, [modelLoaded]);
 
-  // Set canvas size to match video
   const setCanvasDimensions = () => {
     if (videoRef.current && canvasRef.current) {
       canvasRef.current.width = videoRef.current.videoWidth;
