@@ -162,9 +162,9 @@ function classifyFaceShape(landmarks: faceapi.FaceLandmarks68): ShapeType {
   const rightJawMid = jaw[12];
   const jawMidWidth = distance(leftJawMid, rightJawMid);
   
+  const jawSquareness = calculateJawSquareness(jaw);
   const jawAngle = calculateJawAngle(jaw);
   const jawCurve = calculateJawlineCurve(jaw);
-  const jawSquareness = calculateJawSquareness(jaw);
   
   const lengthToWidthRatio = faceLength / cheekboneWidth;
   const foreheadToJawRatio = foreheadWidth / jawWidth;
@@ -195,78 +195,130 @@ function classifyFaceShape(landmarks: faceapi.FaceLandmarks68): ShapeType {
     topToMiddleRatio,
     bottomToMiddleRatio
   });
-  
+
+  // Square face - Strong jaw, similar widths at forehead, cheekbones, and jaw
   if (
-    jawSquareness > 0.68 &&
-    Math.abs(jawWidth - cheekboneWidth) / jawWidth < 0.15 &&
-    Math.abs(foreheadWidth - cheekboneWidth) / foreheadWidth < 0.15 &&
-    bottomToMiddleRatio > 0.95 && 
-    lengthToWidthRatio < 1.2 &&
-    jawCurve < 0.22
+    jawSquareness > 0.7 &&
+    Math.abs(jawWidth - cheekboneWidth) / jawWidth < 0.12 &&
+    Math.abs(foreheadWidth - jawWidth) / foreheadWidth < 0.15 &&
+    bottomToMiddleRatio > 0.92 && 
+    lengthToWidthRatio < 1.25 &&
+    jawAngle > 0.2
   ) {
     return "square";
   }
   
+  // Round face - Width and length similar, softer angles
   if (
-    lengthToWidthRatio < 1.1 &&
-    jawCurve < 0.14 &&
-    jawAngle < 0.17 &&
-    jawSquareness < 0.60
+    lengthToWidthRatio < 1.15 &&
+    jawCurve < 0.15 &&
+    jawAngle < 0.18 &&
+    jawSquareness < 0.62 &&
+    Math.abs(jawWidth - cheekboneWidth) / jawWidth < 0.1
   ) {
     return "round";
   }
   
+  // Triangle face - Wider jaw than forehead
   if (
-    foreheadToJawRatio < 0.88 &&
-    jawWidth > foreheadWidth * 1.12 &&
-    bottomToMiddleRatio > 1.08
+    foreheadToJawRatio < 0.9 &&
+    jawWidth > foreheadWidth * 1.1 &&
+    bottomToMiddleRatio > 1.05 &&
+    jawAngle > 0.15
   ) {
     return "triangle";
   }
   
+  // Heart face - Wider forehead than jaw
   if (
-    foreheadToJawRatio > 1.15 &&
-    cheekToJawRatio > 1.12 &&
-    lengthToWidthRatio < 1.38 &&
-    topToMiddleRatio > 0.9 &&
-    bottomToMiddleRatio < 0.88
+    foreheadToJawRatio > 1.2 &&
+    cheekToJawRatio > 1.15 &&
+    lengthToWidthRatio < 1.35 &&
+    topToMiddleRatio > 0.95 &&
+    bottomToMiddleRatio < 0.85
   ) {
     return "heart";
   }
   
+  // Diamond face - Cheekbones are the widest point
   if (
-    cheekToForeheadRatio > 1.13 &&
-    cheekToJawRatio > 1.13 &&
-    topToMiddleRatio < 0.90 &&
-    bottomToMiddleRatio < 0.94 &&
-    lengthToWidthRatio > 1.13
+    cheekToForeheadRatio > 1.15 &&
+    cheekToJawRatio > 1.15 &&
+    topToMiddleRatio < 0.88 &&
+    bottomToMiddleRatio < 0.9 &&
+    lengthToWidthRatio > 1.15
   ) {
     return "diamond";
   }
   
+  // Oval face - Length greater than width, gentle curves
   if (
-    lengthToWidthRatio > 1.12 && 
+    lengthToWidthRatio > 1.2 && 
     lengthToWidthRatio < 1.5 &&
     jawCurve < 0.25 &&
-    jawSquareness < 0.68
+    jawSquareness < 0.65 &&
+    bottomToMiddleRatio < 0.95 &&
+    topToMiddleRatio < 0.95
   ) {
     return "oval";
   }
   
-  const ratios = [
-    { shape: "square", score: jawSquareness > 0.65 ? 5 : 0 },
-    { shape: "round", score: lengthToWidthRatio < 1.05 ? 4 : 0 },
-    { shape: "triangle", score: foreheadToJawRatio < 0.9 ? 3 : 0 },
-    { shape: "heart", score: foreheadToJawRatio > 1.1 ? 3 : 0 },
-    { shape: "diamond", score: cheekToForeheadRatio > 1.1 && cheekToJawRatio > 1.1 ? 4 : 0 },
-    { shape: "oval", score: 1 } // default lowest score
-  ];
+  // Scoring system for when no clear match is found
+  let scores = {
+    square: 0,
+    round: 0,
+    triangle: 0,
+    heart: 0,
+    diamond: 0,
+    oval: 0
+  };
   
-  const bestMatch = ratios.reduce((prev, current) => 
-    (current.score > prev.score) ? current : prev
-  );
+  // Square scoring
+  if (jawSquareness > 0.65) scores.square += 2;
+  if (Math.abs(jawWidth - cheekboneWidth) / jawWidth < 0.15) scores.square += 1;
+  if (Math.abs(foreheadWidth - jawWidth) / foreheadWidth < 0.18) scores.square += 1;
+  if (bottomToMiddleRatio > 0.9) scores.square += 1;
+  if (jawAngle > 0.2) scores.square += 1;
   
-  return bestMatch.shape as ShapeType;
+  // Round scoring
+  if (lengthToWidthRatio < 1.15) scores.round += 2;
+  if (jawCurve < 0.15) scores.round += 1;
+  if (jawSquareness < 0.6) scores.round += 1;
+  if (Math.abs(jawWidth - cheekboneWidth) / jawWidth < 0.12) scores.round += 1;
+  
+  // Triangle scoring
+  if (foreheadToJawRatio < 0.9) scores.triangle += 2;
+  if (jawWidth > foreheadWidth * 1.1) scores.triangle += 2;
+  if (bottomToMiddleRatio > 1.05) scores.triangle += 1;
+  
+  // Heart scoring
+  if (foreheadToJawRatio > 1.15) scores.heart += 2;
+  if (bottomToMiddleRatio < 0.85) scores.heart += 1;
+  if (topToMiddleRatio > 0.95) scores.heart += 1;
+  if (cheekToJawRatio > 1.1) scores.heart += 1;
+  
+  // Diamond scoring
+  if (cheekToForeheadRatio > 1.1 && cheekToJawRatio > 1.1) scores.diamond += 3;
+  if (topToMiddleRatio < 0.9 && bottomToMiddleRatio < 0.9) scores.diamond += 2;
+  
+  // Oval scoring
+  if (lengthToWidthRatio > 1.2 && lengthToWidthRatio < 1.5) scores.oval += 2;
+  if (jawCurve < 0.2) scores.oval += 1;
+  if (jawSquareness < 0.65) scores.oval += 1;
+  
+  // Find the shape with the highest score
+  let bestMatch: ShapeType = "oval";
+  let highestScore = 0;
+  
+  for (const [shape, score] of Object.entries(scores)) {
+    if (score > highestScore) {
+      highestScore = score;
+      bestMatch = shape as ShapeType;
+    }
+  }
+  
+  console.log("Shape scores:", scores, "Best match:", bestMatch);
+  return bestMatch;
 }
 
 function calculateJawlineCurve(jawPoints: Array<{ x: number; y: number }>): number {
